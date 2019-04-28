@@ -1,10 +1,12 @@
-library(tidyverse)
-library(rvest)
-library(magick)
-library(tesseract)
+# R version 3.5.3 (2019-03-11)
+library(tidyverse) # v. 1.2.1
+library(rvest) # v. 0.3.2
+library(magick) # v. 2.0
+library(tesseract) # v. 4.0
+library(extrafont) # v. 0.17
 rus <- tesseract("rus")
-theme_set(theme_bw())
-
+theme_set(theme_bw()+theme(text = element_text(size = 14, family = "Roboto Medium")))
+                        
 # collecting data from RAS website ----------------------------------------
 links <- c(paste0("http://www.ras.ru/members/personalstaff1724/fullmembers.aspx?ml=", 0:32),
            paste0("http://www.ras.ru/members/personalstaff1724/correspondentmembers.aspx?acmem=", 0:32),
@@ -143,7 +145,7 @@ sapply(list.files("pics/"), function(i){
   name1 <- text[str_which(text, "сов[ес]т (на|при)")]
   name2 <- text[str_which(text, "сов[ес]т (на|при)") + 1]
   name3 <- text[str_which(text, "сов[ес]т (на|при)") + 2]
-  scie_field <- paste(text[str_which(text, "СПИСОК")+1:2], collapse = " ")
+  scie_field <- paste(text[str_which(text, "СПИСОК")+1:3], collapse = " ")
   id <- str_remove(str_extract(i, "^.*_"), "_")
   write_csv(data.frame(
     ifelse(length(name1) == 0, NA, name1), 
@@ -152,7 +154,7 @@ sapply(list.files("pics/"), function(i){
     ifelse(length(scie_field) == 0, NA, scie_field), 
     i, 
     id), 
-            "HAC_people.csv", append = TRUE, col_names = FALSE)
+            "HAC_people_2.csv", append = TRUE, col_names = FALSE)
 })
 
 
@@ -161,23 +163,15 @@ HAC_links <- read_csv("HAC_orders.csv")
 HAC <- read_csv("HAC_people.csv", col_names = FALSE)
 colnames(HAC) <- c("l_name", "name", "s_name", "sci_field", "file", "id")
 
+sapply(seq_along(HAC$sci_field), function(i){
+  HAC$sci_field[i] <<- ifelse(is.na(HAC$sci_field[i]), 
+                              HAC$sci_field[i-1],
+                              HAC$sci_field[i])
+})
+
 left_join(HAC, HAC_links) %>% 
   rename(order_text = text) %>% 
   mutate(sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
-         sci_field = ifelse(is.na(sci_field), lag(sci_field),sci_field),
          sci_field2 = str_extract(sci_field, "ди(п|н)лом[-—–\\| а-яА-Я]*(\\(|\\{)"),
          sci_field2 = str_remove(sci_field2, "ди(п|н)лом ?(кандидата|доктора) "),
          sci_field2 = str_remove_all(sci_field2, "\\(|\\{|\\|"),
@@ -327,7 +321,51 @@ results <- results[-nrow(results),]
 
 write_csv(results, "RAS_proffesors.csv")
 
+# directors ---------------------------------------------------------------
+source <- "https://ru.wikipedia.org/wiki/%D0%98%D0%BD%D1%81%D1%82%D0%B8%D1%82%D1%83%D1%82%D1%8B_%D0%A0%D0%90%D0%9D"
 
+source <- read_html(source)
+
+source %>% 
+  html_nodes("ul > li > a") %>% 
+  html_text() %>% 
+  tibble(text = .) %>% 
+  slice(56:738) ->
+  titles
+
+rmv <- str_which(titles$text, "РАН")
+
+titles <- titles[rmv,]
+
+source %>% 
+  html_nodes("ul > li > a") %>% 
+  html_attr("href") %>% 
+  tibble(url = .) %>% 
+  slice(56:738) %>% 
+  slice(rmv) ->
+  urls
+
+urls_rmv <- str_which(urls$url, "/w/", negate = TRUE)
+
+urls <- paste0("https://ru.wikipedia.org", urls$url[urls_rmv])
+titles <- titles$text[urls_rmv]
+
+results <- tibble(director = NA, url = NA, institute = NA)
+sapply(seq_along(urls), function(i){
+  source <- read_html(urls[i])
+  source %>% 
+    html_nodes("tr") %>% 
+    html_text() ->
+    text
+  tibble(director = text[str_which(text, "Директор")], url = urls[i], institute = titles[i]) %>% 
+    rbind(results) ->>
+    results
+})
+
+results %>% 
+  mutate(director2 = str_remove_all(director, "ак. |акад. |\n|Директор|чл(ен)?.-корр. РАН |Годы|—|\\[1\\]|"),
+         director3 = str_extract(director2, "[А-Я][а-я]{0,}\\.?,? [А-Я][а-я]{0,}\\.? [А-Я][а-я]{0,}\\.?")) %>% 
+  write_csv(., "RAS_directors.csv", na = "")
 
 
 # plots -------------------------------------------------------------------
@@ -401,7 +439,7 @@ RAS %>%
   geom_smooth(se = FALSE, size = 2)+
   geom_point()+
   scale_color_discrete(labels = c("члены-коресспонденты", "академики"))+
-  theme(legend.position = c(0.2, 0.9),
+  theme(legend.position = c(0.3, 0.9),
         legend.direction = "horizontal")+
   labs(x = "год",
      y = "доля женщин в каждом приеме в академию",
@@ -423,14 +461,14 @@ prof %>%
   count(type, sex) %>% 
   spread(sex, n) %>% 
   rowwise() %>% 
+  na.omit() %>% 
   mutate(type = factor(type, levels = c("профессор", "член-корреспондент", "академик")),
          total = f+m,
          ratio = f/total,
          conf_l = binom.test(f, total)$conf.int[1],
          conf_h = binom.test(f, total)$conf.int[2]) %>% 
   ggplot(aes(type, ratio, ymin = conf_l, ymax = conf_h)) +
-  geom_pointrange(position = position_dodge(width = -0.5),
-                  size = 2)+
+  geom_pointrange(position = position_dodge(width = -0.5), size = 1.5)+
   labs(x = "",
        y = "доля женщин в РАН",
        caption = "данные автоматически собраны с сайта ras.ru, 27.04.2019")
@@ -473,51 +511,137 @@ RAS %>%
        caption = "данные автоматически собраны с сайта ras.ru, 27.04.2019",
        color = "")+
   coord_flip()+
-  theme(legend.position = c(0.85, 0.89))
+  theme(legend.position = c(0.75, 0.89))
   
+## 6 Протекающий трубопровод: доля женщин по уровням иерархии
+data.frame(cat = factor(c("Россия", "университеты", "кандидаты наук", "доктора", "профессора",
+                               "члены-корреспонденты", "директора институтов",
+                               "академики"), levels = c("Россия", "университеты", "кандидаты наук", "доктора", "профессора",
+                                                        "члены-корреспонденты", "директора институтов",
+                                                        "академики")),
+                source = factor(c("Статистический ежегодник\n'Народное хозяйство СССР',\n1965 г.", "Статистический ежегодник\n'Народное хозяйство СССР',\n1965 г.",
+                                  "ВАК, 2013-2019 гг.", "ВАК, 2013-2019 гг.",
+                                  "Сайт РАН, 2018 г.", "Сайт РАН, 2018 г.", "Википедия, 2010 г.",
+                                  "Сайт PАН, 2018 г."), levels = c("Статистический ежегодник\n'Народное хозяйство СССР',\n1965 г.",
+                                                                   "ВАК, 2013-2019 гг.", "Сайт РАН, 2018 г.", "Википедия, 2010 г.", "Сайт PАН, 2018 г.")),
+                m = c("106.1 млн. ч.",     "226.1 тыс. ч.", "5596 ч.",  1461,  401,    852,   209,    442),
+                f = c(125.8,     177.7, 4284,  1003,  110,    72,    17,     21),
+                f_number = c(125800000,     177700, 4284,  1003,  110,    72,    17,     21),
+                m_number = c(106100000, 226100, 5596, 1461,  401,    852,   209,    442),
+                total = c("231.9 млн. ч.", "403.9 тыс. ч.", "9880 ч.",  "2464 ч.",  "511 ч.",    "924 ч.",   "226 ч.",    "463 ч.")) %>% 
+  rowwise() %>% 
+  mutate(ratio = f_number/(f_number+m_number),
+         total_number = f_number + m_number,
+         conf_l = binom.test(f_number, total_number)$conf.int[1],
+         conf_h = binom.test(f_number, total_number)$conf.int[2]) ->
+  df
 
-# directors ---------------------------------------------------------------
-source <- "https://ru.wikipedia.org/wiki/%D0%98%D0%BD%D1%81%D1%82%D0%B8%D1%82%D1%83%D1%82%D1%8B_%D0%A0%D0%90%D0%9D"
 
-source <- read_html(source)
-
-source %>% 
-  html_nodes("ul > li > a") %>% 
-  html_text() %>% 
-  tibble(text = .) %>% 
-  slice(56:738) ->
-  titles
-
-rmv <- str_which(titles$text, "РАН")
+df %>% 
+  mutate(annotation = paste0(f, " из ", total)) %>% 
+  ggplot(aes(x=cat, y=ratio, ymin = conf_l, ymax = conf_h)) + 
+  geom_pointrange() +
+  geom_text(aes(y = 0.57, label = annotation))+
+  labs(y = "доля женщин",
+       x = "",
+       color = "") +
+  facet_wrap(~source, nrow = 1, scales = "free_x") +
+  theme(strip.background=element_rect(fill="white"))+
+  geom_hline(data = data.frame(yint = 0.41, source = "Википедия, 2010 г."), 
+             aes(yintercept = yint), color = "red", size = 1, linetype = 2)
   
-titles <- titles[rmv,]
+## 7 Потерянные исследовательницы: если предположить отсутствие дискриминации, сколько женщин должно быть на каждом уровне иерархии? 
 
-source %>% 
-  html_nodes("ul > li > a") %>% 
-  html_attr("href") %>% 
-  tibble(url = .) %>% 
-  slice(56:738) %>% 
-  slice(rmv) ->
-  urls
+## 8 ОНИТ и Отделение физиологических наук на выборах 2016 года: сколько избиралось, сколько избрали
 
-urls_rmv <- str_which(urls$url, "/w/", negate = TRUE)
+## 9 Диаграмма по науке и по академикам в разных странах
+academy = read.csv("foreign.csv", encoding = "UTF-8")
+academy = select(academy, `Страна`, `Всего`, `Женщины`, `Процент.женщин.в.науке`)
+academy = na.omit(academy)
+colnames(academy) = c("country", "total", "w", "per_sci")
+academy = academy %>% filter(country != "Новая Зеландия")
+per_sci <- gsub(",", ".", academy$per_sci)
+academy$per_sci = per_sci
 
-urls <- paste0("https://ru.wikipedia.org", urls$url[urls_rmv])
-titles <- titles$text[urls_rmv]
+academy %>%
+  rowwise() %>% 
+  mutate(percent = w/total,
+         conf_l = binom.test(w, total)$conf.int[1],
+         conf_h = binom.test(w, total)$conf.int[2]) %>% 
+  ggplot() +
+  geom_pointrange(aes(x = reorder(country, -percent), y = percent, ymin = conf_l, ymax = conf_h,
+                      colour="национальные академии"), 
+                  shape = 16, size = 1) +
+  geom_point(aes(x = country, y = as.numeric(per_sci),
+                 colour="научная сфера"), shape = 17, size = 4) +
+  scale_colour_manual(name="",
+                      values=c(`национальные академии`="black", `научная сфера`="#E69F00")) +
+  labs(x = "",
+       y = "доля женщин",
+       caption = "данные: The Interacademy Partnership",
+       color = "") +
+  theme(legend.position="right") +
+  coord_flip()
 
-results <- tibble(director = NA, url = NA, institute = NA)
-sapply(seq_along(urls), function(i){
-  source <- read_html(urls[i])
-  source %>% 
-    html_nodes("tr") %>% 
-    html_text() ->
-    text
-  tibble(director = text[str_which(text, "Директор")], url = urls[i], institute = titles[i]) %>% 
-    rbind(results) ->>
-    results
-})
+## 10 
+prof <- read_csv("RAS_proffesors.csv")
+prof %>% 
+  select(name, year, sex, sci_field) %>%
+  mutate(sci_field = str_replace(sci_field, "е ", "х "),
+         sci_field = str_replace(sci_field, "науки", "наук"),
+         sci_field = ifelse(sci_field == "энергетики, машиностроения, механики и процессов управления",
+                            "энергетики, машиностроения,\nмеханики и процессов\nуправления",
+                            sci_field),
+         sci_field = ifelse(sci_field == "нанотехнологий и информационных технологий",
+                            "нанотехнологий\nи информационных технологий",
+                            sci_field),
+         sci_field = ifelse(sci_field == "глобальных проблем и международных отношений",
+                            "глобальных проблем\nи международных отношений",
+                            sci_field)) %>% 
+  filter(sci_field != "Отделение NA") %>% 
+  filter(!is.na(sci_field)) %>% 
+  count(sci_field, sex) %>% 
+  spread(sex, n, fill = 0) %>% 
+  na.omit() %>%
+  mutate(total = f+m,
+         ratio = f/total,
+         sci_field = reorder(sci_field, ratio)) %>%
+  rowwise() %>%
+  mutate(conf_l = binom.test(f, total)$conf.int[1],
+         conf_h = binom.test(f, total)$conf.int[2]) %>% 
+  ggplot(aes(sci_field, ratio, ymin = conf_l, ymax = conf_h)) +
+  geom_pointrange(size = 1.5)+
+  labs(x = "отделение",
+       y = "доля женщин среди професcоров РАН",
+       caption = "данные автоматически собраны с сайта ras.ru, 27.04.2019")+
+  coord_flip()
 
-results %>% 
-  mutate(director2 = str_remove_all(director, "ак. |акад. |\n|Директор|чл(ен)?.-корр. РАН |Годы|—|\\[1\\]|"),
-         director3 = str_extract(director2, "[А-Я][а-я]{0,}\\.?,? [А-Я][а-я]{0,}\\.? [А-Я][а-я]{0,}\\.?")) %>% 
-  write_csv(., "RAS_directors.csv", na = "")
+
+# stat._signiff -----------------------------------------------------------
+# Разница между Россией и университетами стат значимо
+chisq.test(matrix(c(106100000, 125800000, 226100, 177700), nrow = 2))
+# X-squared = 17031, df = 1, p-value < 2.2e-16
+
+# Разница между университетами и кандидатами наук НЕ стат значимо
+chisq.test(matrix(c(226100, 177700, 5596, 4284), nrow = 2))
+# X-squared = 1.6104, df = 1, p-value = 0.2044
+
+# Разница между кандидатами и докторами наук стат значимо
+chisq.test(matrix(c(5596, 4284, 1461, 1003), nrow = 2))
+# X-squared = 5.566, df = 1, p-value = 0.01831
+
+# Разница между докторами наук и проффесорами РАН стат значимо
+chisq.test(matrix(c(1461, 1003, 401, 110), nrow = 2))
+# X-squared = 65.674, df = 1, p-value = 5.321e-16
+
+# Разница между проффесорами РАН и членами-корреспондентами стат значимо
+chisq.test(matrix(c(401, 110, 852, 72), nrow = 2))
+# X-squared = 54.811, df = 1, p-value = 1.327e-13
+
+# Разница между членами-корреспондентами и директорами институтов стат значимо
+chisq.test(matrix(c(852, 72, 209, 17), nrow = 2))
+# X-squared = 2.0212e-28, df = 1, p-value = 1
+
+# Разница между директорами институтов и академиками НЕ стат значимо
+chisq.test(matrix(c(209, 17, 442, 21), nrow = 2))
+# X-squared = 2.0578, df = 1, p-value = 0.1514
