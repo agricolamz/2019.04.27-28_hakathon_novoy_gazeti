@@ -1,4 +1,4 @@
-# R version 3.5.3 (2019-03-11)
+# R version 3.6.0 (2019-04-26)
 library(tidyverse) # v. 1.2.1
 library(rvest) # v. 0.3.2
 library(magick) # v. 2.0
@@ -400,11 +400,13 @@ HAC %>%
          conf_h = binom.test(f, total)$conf.int[2]) %>% 
   ggplot(aes(sci_field2, ratio, color = type, ymin = conf_l, ymax = conf_h)) +
   geom_pointrange(position = position_dodge(width = -0.5))+
+  geom_text(y = 1.05, aes(label = round(ratio, 2)), position = position_dodge(width = -0.8))+
   coord_flip()+
   labs(x = "",
        color = "",
        y = "доля женщин среди кандидатов и докторов наук, защитившихся в последние 7 лет",
-       caption = "данные автоматически собраны из приказов ВАК arhvak.minobrnauki.gov.ru, 27.04.2019")
+       caption = "данные автоматически собраны из приказов ВАК arhvak.minobrnauki.gov.ru, 27.04.2019")+
+  ylim(0, 1.05)
 
 ## 2 Доля женщин с основания РАН в принципе
 
@@ -468,10 +470,12 @@ prof %>%
          conf_l = binom.test(f, total)$conf.int[1],
          conf_h = binom.test(f, total)$conf.int[2]) %>% 
   ggplot(aes(type, ratio, ymin = conf_l, ymax = conf_h)) +
-  geom_pointrange(position = position_dodge(width = -0.5), size = 1.5)+
+  geom_pointrange(size = 1.5)+
   labs(x = "",
        y = "доля женщин в РАН",
-       caption = "данные автоматически собраны с сайта ras.ru, 27.04.2019")
+       caption = "данные автоматически собраны с сайта ras.ru, 27.04.2019")+
+  geom_text(y = 0.01, aes(label = round(ratio, 2)))+
+  ylim(0, 0.26)
 
 ## 5 Доля женщин в нынешнем составе РАН по отделениям
 
@@ -511,7 +515,9 @@ RAS %>%
        caption = "данные автоматически собраны с сайта ras.ru, 27.04.2019",
        color = "")+
   coord_flip()+
-  theme(legend.position = c(0.75, 0.89))
+  theme(legend.position = c(0.75, 0.89))+
+  geom_text(y = -0.03, aes(label = round(ratio, 2)), position = position_dodge(width = -0.8))+
+  ylim(-0.03, 0.46)
   
 ## 6 Протекающий трубопровод: доля женщин по уровням иерархии
 data.frame(cat = factor(c("Россия", "университеты", "кандидаты наук", "доктора", "профессора",
@@ -548,7 +554,9 @@ df %>%
   facet_wrap(~source, nrow = 1, scales = "free_x") +
   theme(strip.background=element_rect(fill="white"))+
   geom_hline(data = data.frame(yint = 0.41, source = "Википедия, 2010 г."), 
-             aes(yintercept = yint), color = "red", size = 1, linetype = 2)
+             aes(yintercept = yint), color = "red", size = 1, linetype = 2)+
+  geom_text(y = 0.01, aes(label = round(ratio, 2)))+
+  ylim(0, 0.57)
   
 ## 7 Потерянные исследовательницы: если предположить отсутствие дискриминации, сколько женщин должно быть на каждом уровне иерархии? 
 
@@ -581,7 +589,10 @@ academy %>%
        caption = "данные: The Interacademy Partnership",
        color = "") +
   theme(legend.position="right") +
-  coord_flip()
+  coord_flip()+
+  geom_text(aes(x = reorder(country, -percent), label = round(percent, 2)), y = 0.01)+
+  geom_text(aes(x = reorder(country, -percent), label = round(as.numeric(per_sci), 2)), y = 0.55, color = "#E69F00")+
+  ylim(0, 0.55)
 
 ## 10 
 prof <- read_csv("RAS_proffesors.csv")
@@ -614,7 +625,9 @@ prof %>%
   labs(x = "отделение",
        y = "доля женщин среди професcоров РАН",
        caption = "данные автоматически собраны с сайта ras.ru, 27.04.2019")+
-  coord_flip()
+  coord_flip()+
+  geom_text(aes(label = round(ratio, 2)), y = -0.04)+
+  ylim(-0.04, 1)
 
 
 # stat._signiff -----------------------------------------------------------
