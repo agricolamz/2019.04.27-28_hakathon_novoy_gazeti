@@ -398,15 +398,17 @@ HAC %>%
          ratio = f/total,
          conf_l = binom.test(f, total)$conf.int[1],
          conf_h = binom.test(f, total)$conf.int[2]) %>% 
-  ggplot(aes(sci_field2, ratio, color = type, ymin = conf_l, ymax = conf_h)) +
+  rev() %>%
+  ggplot(aes(reorder(sci_field2, desc(sci_field2)), ratio, color = type, ymin = conf_l, ymax = conf_h)) +
   geom_pointrange(position = position_dodge(width = -0.5))+
   geom_text(y = 1.05, aes(label = round(ratio, 2)), position = position_dodge(width = -0.8))+
   coord_flip()+
   labs(x = "",
        color = "",
        y = "доля женщин среди кандидатов и докторов наук, защитившихся в последние 7 лет",
-       caption = "данные автоматически собраны из приказов ВАК arhvak.minobrnauki.gov.ru, 27.04.2019")+
-  ylim(0, 1.05)
+       caption = "данные автоматически собраны из приказов ВАК: arhvak.minobrnauki.gov.ru, 27.04.2019")+
+  ylim(0, 1.05) +
+  theme(plot.caption = element_text(hjust = 1))
 
 ## 2 Доля женщин с основания РАН в принципе
 
@@ -616,7 +618,7 @@ prof %>%
   na.omit() %>%
   mutate(total = f+m,
          ratio = f/total,
-         sci_field = reorder(sci_field, ratio)) %>%
+         sci_field = reorder(sci_field, -ratio)) %>%
   rowwise() %>%
   mutate(conf_l = binom.test(f, total)$conf.int[1],
          conf_h = binom.test(f, total)$conf.int[2]) %>% 
@@ -658,3 +660,44 @@ chisq.test(matrix(c(852, 72, 209, 17), nrow = 2))
 # Разница между директорами институтов и академиками НЕ стат значимо
 chisq.test(matrix(c(209, 17, 442, 21), nrow = 2))
 # X-squared = 2.0578, df = 1, p-value = 0.1514
+
+
+# hirsh -------------------------------------------------------------------
+
+source <- "http://www.expertcorps.ru/science/whoiswho/ci86?sortby=ddg"
+html <- read_html(source)
+
+html %>% 
+  html_nodes("a") %>% 
+  html_attr("href") %>% 
+  tibble(link = .) %>% 
+  filter(str_detect(link, "info")) %>% 
+  mutate(link = paste0("http://www.expertcorps.ru", link)) ->
+  links
+
+links$name <- NA
+
+sapply(seq_along(links$link), function(i){
+  print(i)
+  html <- read_html(links$link[i])
+  html %>% 
+    html_nodes("h2") %>% 
+    html_text() ->>
+    links$name[i]
+  html %>% 
+    html_nodes("tr.x-desc:nth-child(7)") %>% 
+    html_text() ->>
+    links$hirsh[i]
+})
+
+links %>% 
+  mutate(hirsh = str_extract(hirsh, "\\d{1,}"),
+         hirsh = as.numeric(hirsh)) %>% 
+  rename(link2 = link) ->
+  links
+
+df <- read_csv("/home/agricolamz/work/materials/2019.04.27-28_hakathon_novoy_gazeti/RAS_aggregated.csv")
+
+df %>% 
+  left_join(links) %>% 
+  write_csv("/home/agricolamz/work/materials/2019.04.27-28_hakathon_novoy_gazeti/RAS_aggregated.csv")
