@@ -701,3 +701,29 @@ df <- read_csv("/home/agricolamz/work/materials/2019.04.27-28_hakathon_novoy_gaz
 df %>% 
   left_join(links) %>% 
   write_csv("/home/agricolamz/work/materials/2019.04.27-28_hakathon_novoy_gazeti/RAS_aggregated.csv")
+
+
+# last graphs -------------------------------------------------------------
+df <- read_csv("/home/agricolamz/work/materials/2019.04.27-28_hakathon_novoy_gazeti/RAS_aggregated.csv")
+
+df %>% 
+  filter(str_detect(type, "академик|корр")) ->
+  df
+
+df %>% 
+  ggplot(aes(sex, hirsh))+
+  geom_boxplot()+
+  facet_wrap(~type)+
+  labs(x = "")
+
+m <- lm(data = df, hirsh~sex)
+summary(m)
+plot(m)
+
+df %>% 
+  ggplot(aes(sex, hirsh))+
+  geom_boxplot()+
+  facet_wrap(~department)
+
+
+
